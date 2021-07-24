@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from io import BytesIO
 from os.path import join, basename
+from sys import platform
 from typing import Union
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -52,7 +53,34 @@ class Dependency:
 
         return True
 
+    def local(self) -> bool:
+        name = None
+
+        if platform == "linux" or platform == "linux2":
+            name = "linuxx86-64"
+        elif platform == "darwin":
+            name = "osxx86-64"
+        elif platform == "win32":
+            name = "windowsx86-64"
+
+        library_zip = self.get(name + ("" if self.shared else "static"))
+        if library_zip is None:
+            return False
+
+        for library in filter(lambda f: ".so" in f or ".a" in f or ".dll" in f or ".lib" in f, library_zip.namelist()):
+            libname = basename(library)
+            libname = until(libname, ".so")
+            libname = until(libname, ".a")
+            libname = until(libname, ".dll")
+            libname = until(libname, ".lib")
+            libname = libname.lower().replace("_", "").replace("-", "").replace("cpp", "")
+
+            open(join(CMAKERIO_ROOT, "local", "lib", libname), "wb").write(library_zip.read(library))
+
+        return True
+
     def install(self):
         print(f"Installing {self.category}.{self.name}")
         self.headers()
         self.roborio()
+        self.local()
